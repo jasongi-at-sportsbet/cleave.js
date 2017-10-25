@@ -33,9 +33,9 @@ var Cleave = CreateReactClass({
         if (newValue !== undefined) {
             newValue = newValue.toString();
 
-            if (newValue !== owner.properties.initValue) {
+            if (newValue !== owner.state.value && newValue !== owner.properties.result) {
                 owner.properties.initValue = newValue;
-                owner.onInput(newValue);
+                owner.onInput(newValue, true);
             }
         }
 
@@ -65,6 +65,7 @@ var Cleave = CreateReactClass({
         options.initValue = value;
 
         owner.properties = DefaultProperties.assign({}, options);
+        owner.lastInputValue = '';
 
         return {
             value: owner.properties.result,
@@ -191,7 +192,7 @@ var Cleave = CreateReactClass({
         var owner = this,
             pps = owner.properties,
             charCode = event.which || event.keyCode;
-
+        
         // hit backspace when last character is delimiter
         if (charCode === 8 && Util.isDelimiter(pps.result.slice(-pps.delimiterLength), pps.delimiter, pps.delimiters)) {
             pps.backspace = true;
@@ -232,15 +233,20 @@ var Cleave = CreateReactClass({
         owner.registeredEvents.onChange(event);
     },
 
-    onInput: function (value) {
+    onInput: function (value, fromProps) {
         var owner = this, pps = owner.properties;
 
+
+        if (Util.isAndroidBackspaceKeydown(owner.lastInputValue, owner.element.value) && 
+            Util.isDelimiter(pps.result.slice(-pps.delimiterLength), pps.delimiter, pps.delimiters)) {
+            pps.backspace = true;
+        }
         // case 1: delete one more character "4"
         // 1234*| -> hit backspace -> 123|
         // case 2: last character is not delimiter which is:
         // 12|34* -> hit backspace -> 1|34*
 
-        if (!pps.numeral && pps.backspace && !Util.isDelimiter(value.slice(-pps.delimiterLength), pps.delimiter, pps.delimiters)) {
+        if (!fromProps && !pps.numeral && pps.backspace && !Util.isDelimiter(value.slice(-pps.delimiterLength), pps.delimiter, pps.delimiters)) {
             value = Util.headStr(value, value.length - pps.delimiterLength);
         }
 
@@ -254,7 +260,11 @@ var Cleave = CreateReactClass({
 
         // numeral formatter
         if (pps.numeral) {
-            pps.result = pps.prefix + pps.numeralFormatter.format(value);
+            if (pps.prefix && (!pps.noImmediatePrefix || value.length)) {
+                pps.result = pps.prefix + pps.numeralFormatter.format(value);
+            } else {
+                pps.result = pps.numeralFormatter.format(value);
+            }
             owner.updateValueState();
 
             return;
@@ -279,7 +289,7 @@ var Cleave = CreateReactClass({
         value = pps.lowercase ? value.toLowerCase() : value;
 
         // prefix
-        if (pps.prefix) {
+        if (pps.prefix && (!pps.noImmediatePrefix || value.length)) {
             value = pps.prefix + value;
 
             // no blocks specified, no need to do formatting
@@ -362,6 +372,8 @@ var Cleave = CreateReactClass({
         var oldValue = owner.element.value;
         var newValue = owner.properties.result;
         var nextCursorPosition = owner.getNextCursorPosition(endPos, oldValue, newValue);
+
+        owner.lastInputValue = owner.properties.result;
 
         if (owner.isAndroid) {
             window.setTimeout(function () {
